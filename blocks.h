@@ -7,6 +7,7 @@ static const Block blocks[] = {
   {"",      "status-music",     0,                    1},
   {"",      "status-updates",   7200,                 2},
   {"",      "status-volume",    0,                    5},
+  {"",      "status-bluetooth", 60,                   10},
   {"",      "status-internet",  60,                   7},
   {"",      "status-battery",   60,                   6},
   {"",      "status-time",      60,                   8},
