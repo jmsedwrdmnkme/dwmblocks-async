@@ -4,11 +4,11 @@ static const Block blocks[] = {
   {"",      "status-weather",   3600,                 9},
   {"",      "status-rss",       60,                   4},
   {"",      "status-mail",      60,                   3},
-  {"",      "status-music",     0,                    1},
   {"",      "status-updates",   3600,                 2},
-  {"",      "status-volume",    0,                    5},
+  {"",      "status-music",     0,                    1},
   {"",      "status-bluetooth", 60,                   10},
   {"",      "status-internet",  60,                   7},
+  {"",      "status-volume",    0,                    5},
   {"",      "status-battery",   60,                   6},
   {"",      "status-time",      60,                   8},
 };
