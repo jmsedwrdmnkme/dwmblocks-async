@@ -8,8 +8,10 @@ static const Block blocks[] = {
   {"",      "status-music",     0,                    1},
   {"",      "status-bluetooth", 60,                   10},
   {"",      "status-internet",  60,                   7},
+  {"",      "status-mic",       0,                    11},
   {"",      "status-volume",    0,                    5},
   {"",      "status-battery",   60,                   6},
+  {"",      "status-date",      60,                   12},
   {"",      "status-time",      60,                   8},
 };
 
