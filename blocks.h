@@ -12,6 +12,7 @@ static const Block blocks[] = {
   {"",      "~/.local/bin/status/status-volume",    0,                    5},
   {"",      "~/.local/bin/status/status-battery",   60,                   6},
   {"",      "~/.local/bin/status/status-time",      60,                   12},
+  {"",      "cat /tmp/recordingicon 2>/dev/null",   0,                    13},
 };
 
 //sets delimeter between status commands. NULL character ('\0') means no delimeter.
