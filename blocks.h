@@ -1,12 +1,11 @@
 //Modify this file to change what commands output to your statusbar, and recompile using the make command.
 static const Block blocks[] = {
-  /*Icon*/  /*Command*/         /*Update Interval*/   /*Update Signal*/
-  {"",      "~/.local/bin/status/status-weather",   3600,                 9},
+  /*Icon*/  /*Command*/                             /*Update Interval*/   /*Update Signal*/
+  {"",      "~/.local/bin/status/status-weather",   900,                  9},
   {"",      "~/.local/bin/status/status-rss",       60,                   4},
   {"",      "~/.local/bin/status/status-mail",      60,                   3},
   {"",      "~/.local/bin/status/status-updates",   3600,                 2},
   {"",      "~/.local/bin/status/status-music",     0,                    1},
-  {"",      "~/.local/bin/status/status-twitch",    60,                   14},
   {"",      "~/.local/bin/status/status-bluetooth", 60,                   10},
   {"",      "~/.local/bin/status/status-internet",  60,                   7},
   {"",      "~/.local/bin/status/status-mic",       0,                    11},
@@ -17,5 +16,5 @@ static const Block blocks[] = {
 };
 
 //sets delimeter between status commands. NULL character ('\0') means no delimeter.
-static char delim[] = "\0";
+static char delim[] = " · ";
 static unsigned int delimLen = 5;
