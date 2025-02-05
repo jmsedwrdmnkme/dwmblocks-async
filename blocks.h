@@ -7,7 +7,7 @@ static const Block blocks[] = {
   {"",      "~/.local/bin/status/status-mic",       0,                    11},
   {"",      "~/.local/bin/status/status-volume",    0,                    5},
   {"",      "~/.local/bin/status/status-bluetooth", 0,                    10},
-  {"",      "~/.local/bin/status/status-internet",  60,                   7},
+  {"",      "~/.local/bin/status/status-internet",  0,                    7},
   {"",      "~/.local/bin/status/status-battery",   60,                   6},
   {"",      "~/.local/bin/status/status-time",      60,                   12},
 };
