@@ -2,8 +2,10 @@ name: Sync upstream
 
 on:
   schedule:
-    - cron: "0 3 * * *" # 03:00 UTC daily
-  workflow_dispatch:
+    - cron: "0 3 * * *" # daily at 03:00 UTC
+  workflow_dispatch: # allow manual runs
+  push:
+    branches: [upstream-sync] # refresh the PR after a manual fix (pushes made by this workflow don't retrigger it)
 
 permissions:
   contents: write
@@ -14,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  UPSTREAM_REPO: UtkarshVerma/dwmblocks-async
+  UPSTREAM_URL: https://github.com/UtkarshVerma/dwmblocks-async
   UPSTREAM_BRANCH: main
   SYNC_BRANCH: upstream-sync
 
@@ -22,59 +24,120 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          # Optional PAT with `repo` + `workflow` scopes; needed only if
-          # upstream changes files under .github/workflows.
-          token: ${{ secrets.SYNC_TOKEN || github.token }}
 
       - name: Fetch upstream
         run: |
-          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
-          git fetch --no-tags upstream "${UPSTREAM_BRANCH}"
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch upstream "$UPSTREAM_BRANCH"
 
       - name: Check for new upstream commits
         id: check
         run: |
-          base="${{ github.event.repository.default_branch }}"
-          echo "base=${base}" >> "$GITHUB_OUTPUT"
-          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" "origin/${base}"; then
-            echo "Already up to date with ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "New upstream commits:"
-            git log --oneline "origin/${base}..upstream/${UPSTREAM_BRANCH}"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
+          BASE_BRANCH="${{ github.event.repository.default_branch }}"
+          echo "base=$BASE_BRANCH" >> "$GITHUB_OUTPUT"
+
+          NEW_COMMITS=$(git rev-list --count "origin/$BASE_BRANCH..upstream/$UPSTREAM_BRANCH")
+          echo "count=$NEW_COMMITS" >> "$GITHUB_OUTPUT"
+          echo "Upstream has $NEW_COMMITS commit(s) not in $BASE_BRANCH"
+
+          {
+            echo "log<<EOF"
+            git log --no-merges --pretty='- %h %s (%an)' "origin/$BASE_BRANCH..upstream/$UPSTREAM_BRANCH"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Push sync branch
-        if: steps.check.outputs.changed == 'true'
-        run: git push --force origin "upstream/${UPSTREAM_BRANCH}:refs/heads/${SYNC_BRANCH}"
-
-      - name: Open pull request
-        if: steps.check.outputs.changed == 'true'
+        id: push
+        if: steps.check.outputs.count != '0'
         env:
-          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
           BASE: ${{ steps.check.outputs.base }}
         run: |
-          existing=$(gh pr list --head "${SYNC_BRANCH}" --base "${BASE}" --state open --json number --jq '.[0].number')
-          if [ -n "${existing}" ]; then
-            echo "PR #${existing} already open; branch updated."
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BOT_EMAIL="41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Commits on the existing sync branch that aren't from upstream, the base branch or this workflow,
+          # e.g. a conflict resolution made on the PR. Rebuilding the branch would throw them away.
+          MANUAL=0
+          if git rev-parse --verify --quiet "origin/$SYNC_BRANCH" > /dev/null; then
+            MANUAL=$(git log --format='%ce' "origin/$BASE..origin/$SYNC_BRANCH" "^upstream/$UPSTREAM_BRANCH" \
+              | grep -cvxF "$BOT_EMAIL" || true)
+          fi
+
+          if [ "$MANUAL" != "0" ]; then
+            echo "Keeping $MANUAL manual commit(s) on $SYNC_BRANCH"
+            git checkout -B "$SYNC_BRANCH" "origin/$SYNC_BRANCH"
+            if git merge-base --is-ancestor "upstream/$UPSTREAM_BRANCH" HEAD; then
+              echo "$SYNC_BRANCH already contains upstream/$UPSTREAM_BRANCH"
+            elif git merge --no-edit "upstream/$UPSTREAM_BRANCH"; then
+              git push origin "$SYNC_BRANCH"
+            else
+              # Leave the branch untouched rather than discard the manual commits
+              CONFLICTS=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+              echo "::warning::New upstream commits conflict with $SYNC_BRANCH: $CONFLICTS"
+              echo "conflicts=$CONFLICTS" >> "$GITHUB_OUTPUT"
+              echo "conflicts_with=upstream/$UPSTREAM_BRANCH" >> "$GITHUB_OUTPUT"
+              git merge --abort
+            fi
             exit 0
           fi
 
-          {
-            echo "Automated sync of \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` into \`${BASE}\`."
-            echo
-            echo "### New upstream commits"
-            echo
-            git log --format='- %h %s' "origin/${BASE}..upstream/${UPSTREAM_BRANCH}"
-          } > pr-body.md
+          # Build the sync branch on top of the base branch so the PR always shares history with it
+          git checkout -B "$SYNC_BRANCH" "origin/$BASE"
+          if ! git merge --no-edit --allow-unrelated-histories "upstream/$UPSTREAM_BRANCH"; then
+            # Push the upstream tip as-is so the PR still opens; GitHub flags it as conflicting
+            CONFLICTS=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            echo "::warning::Merge conflicts with upstream: $CONFLICTS"
+            echo "conflicts=$CONFLICTS" >> "$GITHUB_OUTPUT"
+            echo "conflicts_with=$BASE" >> "$GITHUB_OUTPUT"
+            git merge --abort
+            git checkout -B "$SYNC_BRANCH" "upstream/$UPSTREAM_BRANCH"
+          fi
 
-          gh pr create \
-            --head "${SYNC_BRANCH}" \
-            --base "${BASE}" \
-            --title "Sync with upstream ${UPSTREAM_REPO}" \
-            --body-file pr-body.md
+          git push --force origin "$SYNC_BRANCH"
+
+      - name: Create or update pull request
+        if: steps.check.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BASE: ${{ steps.check.outputs.base }}
+          COUNT: ${{ steps.check.outputs.count }}
+          LOG: ${{ steps.check.outputs.log }}
+          OWNER: ${{ github.repository_owner }}
+          CONFLICTS: ${{ steps.push.outputs.conflicts }}
+          CONFLICTS_WITH: ${{ steps.push.outputs.conflicts_with }}
+        run: |
+          BODY=$(printf 'Automated sync from %s (%s).\n\n%s new commit(s):\n\n%s\n' \
+            "$UPSTREAM_URL" "$UPSTREAM_BRANCH" "$COUNT" "$LOG")
+          if [ -n "$CONFLICTS" ]; then
+            BODY=$(printf '%s\n\n> [!WARNING]\n> Merge conflicts with %s: `%s`\n> Resolve them on this PR (web editor or locally on `%s`) before merging.\n' \
+              "$BODY" "$CONFLICTS_WITH" "$CONFLICTS" "$SYNC_BRANCH")
+          fi
+
+          EXISTING=$(gh pr list --head "$SYNC_BRANCH" --base "$BASE" --state open --json number --jq '.[0].number')
+
+          if [ -n "$EXISTING" ]; then
+            echo "Updating existing PR #$EXISTING"
+            gh pr edit "$EXISTING" --body "$BODY" --add-reviewer "$OWNER"
+            PR_URL=$(gh pr view "$EXISTING" --json url --jq '.url')
+          else
+            PR_URL=$(gh pr create \
+              --head "$SYNC_BRANCH" \
+              --base "$BASE" \
+              --title "Sync with upstream $(basename "$UPSTREAM_URL")" \
+              --body "$BODY" \
+              --assignee "$OWNER" \
+              --reviewer "$OWNER")
+          fi
+
+          echo "::notice title=Upstream sync PR awaiting merge::$PR_URL"
+          {
+            echo "### Upstream sync PR awaiting merge"
+            echo ""
+            echo "$COUNT new upstream commit(s) are ready for review: $PR_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
