@@ -21,8 +21,8 @@
     X("", "status-updates",   6000, 1)    \
     X("", "status-rss",          0, 2)    \
     X("", "status-mail",         0, 3)    \
-    X("", "status-mic",          0, 4)    \
-    X("", "status-volume",       0, 5)    \
+    X("", "status-audio -m",     0, 4)    \
+    X("", "status-audio -v",     0, 5)    \
     X("", "status-bluetooth",    0, 6)    \
     X("", "status-internet",     0, 7)    \
     X("", "status-battery",     60, 8)    \
